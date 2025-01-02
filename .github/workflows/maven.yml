@@ -16,9 +16,9 @@ jobs:
         ports:
           - 5432:5432
         env:
-          POSTGRES_DB: test_database
-          POSTGRES_USER: test_user
-          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: ordersDB
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
         options: >-
           --health-cmd="pg_isready -U test_user -d test_database"
           --health-interval=10s
@@ -40,20 +40,20 @@ jobs:
     # Step 3: Wait for PostgreSQL readiness
     - name: Wait for PostgreSQL
       run: |
-        until psql -h localhost -U test_user -d test_database -c "SELECT 1"; do
+        until psql -h localhost -U postgres -d ordersDB -c "SELECT 1"; do
           echo "Waiting for PostgreSQL to be ready..."
           sleep 5
         done
       env:
-        PGPASSWORD: test_password
+        PGPASSWORD: password
 
     # Step 4: Initialize Database
     - name: Initialize PostgreSQL Database
       run: |
-        psql -h localhost -U test_user -c "CREATE DATABASE ordersDB;"
-        psql -h localhost -U test_user -d ordersDB -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;"
+        psql -h localhost -U postgres -c "CREATE DATABASE ordersDB;"
+        psql -h localhost -U postgres -d ordersDB -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;"
       env:
-        PGPASSWORD: test_password
+        PGPASSWORD: password
 
     # Step 5: Build the project with Maven
     - name: Build with Maven
@@ -62,9 +62,9 @@ jobs:
     # Step 6: Run Unit Tests
     - name: Run Unit Tests
       env:
-        SPRING_LIQUIBASE_URL: jdbc:postgresql://localhost:5432/test_database
-        SPRING_LIQUIBASE_USER: test_user
-        SPRING_LIQUIBASE_PASSWORD: test_password
+        SPRING_LIQUIBASE_URL: jdbc:postgresql://localhost:5432/ordersDB
+        SPRING_LIQUIBASE_USER: postgres
+        SPRING_LIQUIBASE_PASSWORD: password
       run: mvn -B test --file pom.xml
       
     - name: Generate Code Coverage
