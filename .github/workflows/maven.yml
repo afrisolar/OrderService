@@ -12,6 +12,21 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:14
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: test_database
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        options: >-
+          --health-cmd="pg_isready -U test_user -d test_database"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     steps:
     # Step1: Checkout the code
     - uses: actions/checkout@v4
@@ -24,18 +39,26 @@ jobs:
         distribution: 'temurin'
         cache: maven
 
-    #Step3: Build the project with Maven
+     # Step3: Wait for PostgreSQL to be ready
+    - name: Wait for PostgreSQL
+      run: |
+        until pg_isready -h localhost -p 5432 -U test_user -d test_database; do
+          echo "Waiting for PostgreSQL..."
+          sleep 5
+        done
+
+    #Step 4: Build the project with Maven
     - name: Build with Maven
       run: mvn -B package --file pom.xml
 
-    # Step 4: Run Unit Tests
+    # Step 5: Run Unit Tests
     - name: Run Unit Tests
       run: mvn -B test --file pom.xml
       
     - name: Generate Code Coverage
       run: mvn jacoco:report --file pom.xml
       
-    # Step 5: Run Integration Tests
+    # Step 6: Run Integration Tests
     - name: Run Integration Tests
       run: mvn -B verify --file pom.xml
 
