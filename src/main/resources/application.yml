@@ -4,15 +4,15 @@ spring:
 
   liquibase:
     change-log: classpath:/db/db.changelog.yaml
-    url: jdbc:postgresql://127.0.0.1:5432/ordersDB
-    user: postgres
-    password: password
-
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:ordersDB}
+    user: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:password}
 
   r2dbc:
-    url: r2dbc:postgresql://localhost:5432/ordersDB
-    username: postgres
-    password: password
+    url: r2dbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:ordersDB}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:password}
+
   jpa:
     hibernate:
       ddl-auto: create-drop
@@ -20,7 +20,6 @@ spring:
     properties:
       hibernate:
         format_sql: true
-
 
 logging:
   level:
@@ -30,9 +29,3 @@ logging:
 
 server:
   port: ${SERVER_PORT:8081}
-
-
-
-
-
-
