@@ -4,10 +4,8 @@ package com.afrisol.OrderService.controller;
 import com.afrisol.OrderService.dto.OrderRequest;
 import com.afrisol.OrderService.dto.OrderResponse;
 import com.afrisol.OrderService.service.OrderService;
-import com.afrisol.OrderService.service.OrderServiceImpl;
 import jakarta.validation.Valid;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,10 +19,9 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/orders")
+@Slf4j
 public class OrderController {
     private final OrderService orderService;
-    private static final Logger log = LogManager.getLogger(OrderServiceImpl.class);
-
 
     public OrderController(OrderService orderService) {
         this.orderService = orderService;

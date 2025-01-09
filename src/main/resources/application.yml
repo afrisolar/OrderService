@@ -20,12 +20,18 @@ spring:
     properties:
       hibernate:
         format_sql: true
-
-logging:
-  level:
-    org.springframework.r2dbc.connection: DEBUG
-    org.springframework.data.r2dbc.core: DEBUG
-    org.hibernate.SQL: DEBUG
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      group-id: payment-consumer-group2
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.afrisol.OrderService.dto"
 
 server:
-  port: ${SERVER_PORT:8081}
+  port: ${SERVER_PORT:8086}
+
