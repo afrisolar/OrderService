@@ -18,6 +18,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 
@@ -53,7 +54,7 @@ public class OrderControllerTest {
 
 
         validOrderRequest = OrderRequest.builder()
-                .amount(150.00)
+                .amount(BigDecimal.valueOf(10))
                 .customerId("customer123")
                 .productId("product456")
                 .quantity(3)
@@ -62,7 +63,7 @@ public class OrderControllerTest {
 
         orderResponse = OrderResponse.builder()
                 .orderNumber("ORD-1234")
-                .amount(150.00)
+                .amount(BigDecimal.valueOf(10))
                 .customerId("customer123")
                 .productId("product456")
                 .quantity(3)
@@ -75,7 +76,7 @@ public class OrderControllerTest {
 
         updatedOrderResponse = OrderResponse.builder()
                 .orderNumber("ORD-1234")
-                .amount(200.00)
+                .amount(BigDecimal.valueOf(10))
                 .customerId("customer456")
                 .productId("product789")
                 .quantity(5)
@@ -86,7 +87,7 @@ public class OrderControllerTest {
 
         order1 = OrderResponse.builder()
                 .orderNumber("ORD-1234")
-                .amount(100.00)
+                .amount(BigDecimal.valueOf(10))
                 .customerId("customer1")
                 .productId("product1")
                 .quantity(2)
@@ -97,7 +98,7 @@ public class OrderControllerTest {
 
         order2 = OrderResponse.builder()
                 .orderNumber("ORD-5678")
-                .amount(200.00)
+                .amount(BigDecimal.valueOf(10))
                 .customerId("customer2")
                 .productId("product2")
                 .quantity(4)
@@ -105,7 +106,7 @@ public class OrderControllerTest {
                 .createdAt(LocalDateTime.now())
                 .build();
         orderRequest = OrderRequest.builder()
-                .amount(200.00)
+                .amount(BigDecimal.valueOf(10))
                 .customerId("customer456")
                 .productId("product789")
                 .quantity(5)
