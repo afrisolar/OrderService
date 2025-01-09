@@ -3,6 +3,8 @@ package com.afrisol.OrderService.dto;
 
 import lombok.*;
 
+import java.math.BigDecimal;
+
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
@@ -10,7 +12,7 @@ import lombok.*;
 @Getter
 public class OrderRequest {
     private String customerId;
-    private Double amount;
+    private BigDecimal amount;
     private String productId;
     private Integer quantity;
 }

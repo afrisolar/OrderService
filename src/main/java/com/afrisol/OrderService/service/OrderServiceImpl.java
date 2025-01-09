@@ -1,9 +1,14 @@
 package com.afrisol.OrderService.service;
 
 
+import com.afrisol.OrderService.dto.OrderNotification;
 import com.afrisol.OrderService.dto.OrderRequest;
 import com.afrisol.OrderService.dto.OrderResponse;
+import com.afrisol.OrderService.dto.PaymentResponseDto;
+import com.afrisol.OrderService.exception.OrderNotFoundException;
 import com.afrisol.OrderService.mapper.OrderMapper;
+import com.afrisol.OrderService.model.CustomerOrder;
+import com.afrisol.OrderService.model.OrderStatus;
 import com.afrisol.OrderService.repository.OrderRepository;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -23,25 +28,35 @@ import java.time.LocalDateTime;
 public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private static final Logger log = LogManager.getLogger(OrderServiceImpl.class);
+    private final OrderProducer orderProducer;
+    private final NotificationProducer notificationProducer;
     private final OrderMapper orderMapper = OrderMapper.INSTANCE;
 
 
     @Autowired
-    public OrderServiceImpl(OrderRepository orderRepository) {
+    public OrderServiceImpl(OrderRepository orderRepository, OrderProducer orderProducer, NotificationProducer notificationProducer) {
         this.orderRepository = orderRepository;
+        this.orderProducer = orderProducer;
+        this.notificationProducer = notificationProducer;
     }
 
 
     @Transactional
     public Mono<OrderResponse> addOrder(String requestId, OrderRequest orderRequest) {
-        return orderRepository.save(OrderMapper.INSTANCE.toOrder(orderRequest))
-                .doOnNext(savedCustomerOrder -> {
-                    log.info("CustomerOrder created successfully: {}", savedCustomerOrder); // Log the saved CustomerOrder
-                    log.info("CustomerOrder ID: {}", savedCustomerOrder.getId());
+        return orderRepository.existsByCustomerId(orderRequest.getCustomerId())
+                .flatMap(customerExists -> {
+                    if (!customerExists) {
+                        log.error("Customer ID {} does not exist", orderRequest.getCustomerId());
+                        return Mono.error(new IllegalArgumentException("Customer ID does not exist"));
+                    }
+                    return orderRepository.save(OrderMapper.INSTANCE.toOrder(orderRequest))
+                            .doOnNext(savedCustomerOrder -> {
+                                log.info("Order created successfully: {}", savedCustomerOrder);
+                            })
+                            .map(OrderMapper.INSTANCE::toOrderResponse)
+                            .doOnNext(orderProducer::sendMessage);
                 })
-                .doOnError(error -> log.error("Error creating order: {}", error.getMessage()))
-                .map(OrderMapper.INSTANCE::toOrderResponse)
-                .doOnNext(orderResponse -> log.info("Mapped OrderResponse: {}", orderResponse));
+                .doOnError(error -> log.error("Error processing order: {}", error.getMessage()));
     }
 
 
@@ -98,6 +113,44 @@ public class OrderServiceImpl implements OrderService {
                 .doOnSuccess(unused -> log.info("CustomerOrder deleted successfully with OrderNumber: {}", orderNumber))
                 .doOnError(error -> log.error("Error deleting order: {}", error.getMessage()));
     }
+
+
+    public Mono<CustomerOrder> processOrder(PaymentResponseDto paymentResponse) {
+        return orderRepository.findByCustomerId(paymentResponse.getCustomer()) //should find customer ID
+                .switchIfEmpty(Mono.error(new OrderNotFoundException("Order not found for ID: " + paymentResponse.getPaymentId())))
+                .flatMap(order -> {
+                    if (!isValidOrder(order)) {
+                        return Mono.error(new IllegalArgumentException("Invalid order: " + order));
+                    }
+                    return updateOrderStatus(order, paymentResponse);
+                });
+    }
+
+    protected Mono<CustomerOrder> updateOrderStatus(CustomerOrder order, PaymentResponseDto paymentResponse) {
+        if (order.getAmount().compareTo(paymentResponse.getTotalAmount()) == 0) {
+            order.setStatus(OrderStatus.COMPLETED);
+
+        } else {
+            order.setStatus(OrderStatus.PENDING);
+        }
+        return orderRepository.save(order)
+                .doOnSuccess(savedOrder -> {
+                    if (savedOrder.getStatus() == OrderStatus.COMPLETED) {
+                        OrderNotification notification =  OrderNotification
+                                .builder()
+                                .orderNumber(savedOrder.getOrderNumber())
+                                .status(savedOrder.getStatus().name())
+                                .message("Order status updated to COMPLETED")
+                                .build();
+                        notificationProducer.sendMessage(notification);
+                    }
+                });
+    }
+
+    private boolean isValidOrder(CustomerOrder order) {
+        return order.getStatus() != OrderStatus.CANCELLED;
+    }
+
 }
 
 
