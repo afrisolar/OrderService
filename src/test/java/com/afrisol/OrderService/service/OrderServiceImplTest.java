@@ -3,8 +3,11 @@ package com.afrisol.OrderService.service;
 
 
 
+import com.afrisol.OrderService.dto.OrderNotification;
 import com.afrisol.OrderService.dto.OrderRequest;
 import com.afrisol.OrderService.dto.OrderResponse;
+import com.afrisol.OrderService.dto.PaymentResponseDto;
+import com.afrisol.OrderService.exception.OrderNotFoundException;
 import com.afrisol.OrderService.mapper.OrderMapper;
 import com.afrisol.OrderService.model.CustomerOrder;
 import com.afrisol.OrderService.model.OrderStatus;
@@ -13,6 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -21,12 +25,12 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -35,12 +39,22 @@ public class OrderServiceImplTest {
     @Mock
     private OrderRepository orderRepository;
 
+    @Mock
+    private  OrderProducer orderProducer;
+    @Mock
+    private NotificationProducer notificationProducer;
+
+
+
+    @Mock
+    private OrderMapper orderMapper;
+
 
     @InjectMocks
     private OrderServiceImpl orderService;
 
 
-    private OrderMapper orderMapper = OrderMapper.INSTANCE;
+    //private OrderMapper orderMapper = OrderMapper.INSTANCE;
     OrderResponse orderResponse1;
     OrderResponse orderResponse;
     OrderRequest orderRequest;
@@ -61,13 +75,13 @@ public class OrderServiceImplTest {
         System.out.println("Executing @BeforeEach setup...");
         MockitoAnnotations.openMocks(this);
         orderRequest = OrderRequest.builder()
-                .amount(100.00)
+                .amount(BigDecimal.valueOf(10))
                 .customerId("customer1")
                 .productId("product1")
                 .quantity(2)
                 .build();
         orderResponse = OrderResponse.builder()
-                .amount(100.00)
+                .amount(BigDecimal.valueOf(10))
                 .customerId("customer1")
                 .productId("product1")
                 .orderNumber("ORD-ABR-0001")
@@ -76,7 +90,7 @@ public class OrderServiceImplTest {
                 .createdAt(LocalDateTime.now())
                 .build();
         orderRequest1 = OrderRequest.builder()
-                .amount(10.00)
+                .amount(BigDecimal.valueOf(10))
                 .customerId("customer2")
                 .productId("product2")
                 .quantity(2)
@@ -84,7 +98,7 @@ public class OrderServiceImplTest {
 
 
         orderResponse1 = OrderResponse.builder()
-                .amount(10.00)
+                .amount(BigDecimal.valueOf(10))
                 .customerId("customer2")
                 .productId("product2")
                 .orderNumber("ORD-ABR-0022")
@@ -93,7 +107,7 @@ public class OrderServiceImplTest {
                 .createdAt(LocalDateTime.now())
                 .build();
         mockCustomerOrder = CustomerOrder.builder()
-                .amount(100.00)
+                .amount(BigDecimal.valueOf(10))
                 .customerId("customer1")
                 .productId("product1")
                 .orderNumber("ORD-ABR-0001")
@@ -107,7 +121,7 @@ public class OrderServiceImplTest {
 
         order1 = CustomerOrder.builder()
                 .id(1L)
-                .amount(100.00)
+                .amount(BigDecimal.valueOf(10))
                 .customerId("customer1")
                 .productId("product1")
                 .orderNumber("ORD-1234")
@@ -119,7 +133,7 @@ public class OrderServiceImplTest {
 
         order2 = CustomerOrder.builder()
                 .id(2L)
-                .amount(50.00)
+                .amount(BigDecimal.valueOf(10))
                 .customerId("customer2")
                 .productId("product2")
                 .orderNumber("ORD-5678")
@@ -129,7 +143,7 @@ public class OrderServiceImplTest {
                 .build();
         existingOrder = CustomerOrder.builder()
                 .id(1L)
-                .amount(100.00)
+                .amount(BigDecimal.valueOf(10))
                 .customerId("customer1")
                 .productId("product1")
                 .orderNumber("ORD-1234")
@@ -142,7 +156,7 @@ public class OrderServiceImplTest {
 
         updatedOrder = CustomerOrder.builder()
                 .id(1L)
-                .amount(150.00)
+                .amount(BigDecimal.valueOf(10))
                 .customerId("customer2")
                 .productId("product2")
                 .orderNumber("ORD-1234")
@@ -158,14 +172,24 @@ public class OrderServiceImplTest {
 
     @Test
     public void testAddOrder_Success() {
-        // Arrange
         String requestId = "req123";
-        when(orderRepository.save(any(CustomerOrder.class))).thenReturn(Mono.just(mockCustomerOrder));
+        String customerId = "cust123";
+        OrderRequest orderRequest = new OrderRequest();
+        orderRequest.setCustomerId(customerId);
 
+        CustomerOrder mockCustomerOrder = new CustomerOrder();
+        mockCustomerOrder.setOrderNumber("ORD-ABR-0001");
+
+        OrderResponse mockOrderResponse = new OrderResponse();
+        mockOrderResponse.setOrderNumber("ORD-ABR-0001");
+
+        when(orderRepository.existsByCustomerId(customerId)).thenReturn(Mono.just(true));
+        when(orderRepository.save(any(CustomerOrder.class))).thenReturn(Mono.just(mockCustomerOrder));
+        when(orderMapper.toOrder(orderRequest)).thenReturn(mockCustomerOrder);
+        when(orderMapper.toOrderResponse(mockCustomerOrder)).thenReturn(mockOrderResponse);
 
         // Act
         Mono<OrderResponse> result = orderService.addOrder(requestId, orderRequest);
-
 
         // Assert
         StepVerifier.create(result)
@@ -175,8 +199,9 @@ public class OrderServiceImplTest {
                 })
                 .verifyComplete();
 
-
+        verify(orderRepository, times(1)).existsByCustomerId(customerId);
         verify(orderRepository, times(1)).save(any(CustomerOrder.class));
+        verify(orderProducer, times(1)).sendMessage(any(OrderResponse.class));
     }
     @Test
     public void testGetOrder_Success() {
@@ -362,14 +387,150 @@ public class OrderServiceImplTest {
         verify(orderRepository, never()).delete(any(CustomerOrder.class));
     }
 
+    @Test
+    void testIsValidOrder_WhenOrderIsCancelled_ShouldReturnFalse() {
+        // Arrange
+        CustomerOrder mockOrder = Mockito.mock(CustomerOrder.class);
+        Mockito.when(mockOrder.getStatus()).thenReturn(OrderStatus.CANCELLED);
 
-    public OrderMapper getOrderMapper() {
-        return orderMapper;
+        // Act
+        boolean result = isValidOrder(mockOrder);
+
+        // Assert
+        assertFalse(result, "Expected isValidOrder to return false for cancelled order.");
+    }
+
+    @Test
+    void testUpdateOrderStatus_WhenAmountsMatch_ShouldSetStatusCompletedAndSendNotification() {
+        // Arrange
+        CustomerOrder mockOrder = new CustomerOrder();
+        mockOrder.setAmount(BigDecimal.valueOf(100));
+        mockOrder.setOrderNumber("ORDER123");
+
+        PaymentResponseDto mockPaymentResponse = new PaymentResponseDto();
+        mockPaymentResponse.setTotalAmount(BigDecimal.valueOf(100));
+
+        when(orderRepository.save(any(CustomerOrder.class)))
+                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        // Act & Assert
+        StepVerifier.create(orderService.updateOrderStatus(mockOrder, mockPaymentResponse))
+                .assertNext(savedOrder -> {
+                    assertEquals(OrderStatus.COMPLETED, savedOrder.getStatus());
+                    verify(notificationProducer, times(1)).sendMessage(any(OrderNotification.class));
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void testUpdateOrderStatus_WhenAmountsDoNotMatch_ShouldSetStatusPending() {
+        // Arrange
+        CustomerOrder mockOrder = new CustomerOrder();
+        mockOrder.setAmount(BigDecimal.valueOf(100));
+        mockOrder.setOrderNumber("ORDER123");
+
+        PaymentResponseDto mockPaymentResponse = new PaymentResponseDto();
+        mockPaymentResponse.setTotalAmount(BigDecimal.valueOf(50));
+
+        when(orderRepository.save(any(CustomerOrder.class)))
+                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        // Act & Assert
+        StepVerifier.create(orderService.updateOrderStatus(mockOrder, mockPaymentResponse))
+                .assertNext(savedOrder -> {
+                    assertEquals(OrderStatus.PENDING, savedOrder.getStatus());
+                    verify(notificationProducer, never()).sendMessage(any(OrderNotification.class));
+                })
+                .verifyComplete();
     }
 
 
-    public void setOrderMapper(OrderMapper orderMapper) {
-        this.orderMapper = orderMapper;
+    @Test
+    void testIsValidOrder_WhenOrderIsNotCancelled_ShouldReturnTrue() {
+        CustomerOrder mockOrder = Mockito.mock(CustomerOrder.class);
+        Mockito.when(mockOrder.getStatus()).thenReturn(OrderStatus.NEW);
+        boolean result = isValidOrder(mockOrder);
+        assertTrue(result, "Expected isValidOrder to return true for non-cancelled order.");
     }
+
+    @Test
+    void testProcessOrder_WhenOrderFoundAndValid_ShouldUpdateOrderStatus() {
+        // Arrange
+        String customerId = "CUST123";
+        PaymentResponseDto paymentResponse = new PaymentResponseDto();
+        paymentResponse.setCustomer(customerId);
+        paymentResponse.setTotalAmount(BigDecimal.valueOf(100));
+
+        CustomerOrder mockOrder = new CustomerOrder();
+        mockOrder.setAmount(BigDecimal.valueOf(100));
+        mockOrder.setStatus(OrderStatus.COMPLETED);
+
+        when(orderRepository.findByCustomerId(customerId))
+                .thenReturn(Mono.just(mockOrder));
+
+        when(orderRepository.save(any(CustomerOrder.class)))
+                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        // Act & Assert
+        StepVerifier.create(orderService.processOrder(paymentResponse))
+                .assertNext(updatedOrder -> {
+                    assertEquals(OrderStatus.COMPLETED, updatedOrder.getStatus());
+                    verify(orderRepository).findByCustomerId(customerId);
+                    verify(orderRepository).save(mockOrder);
+                })
+                .verifyComplete();
+    }
+
+
+    @Test
+    void testProcessOrder_WhenOrderNotFound_ShouldThrowOrderNotFoundException() {
+        // Arrange
+        String customerId = "CUST123";
+        PaymentResponseDto paymentResponse = new PaymentResponseDto();
+        paymentResponse.setCustomer(customerId);
+
+        when(orderRepository.findByCustomerId(customerId))
+                .thenReturn(Mono.empty());
+
+        // Act & Assert
+        StepVerifier.create(orderService.processOrder(paymentResponse))
+                .expectErrorMatches(throwable -> throwable instanceof OrderNotFoundException &&
+                        throwable.getMessage().contains("Order not found for ID"))
+                .verify();
+
+        verify(orderRepository).findByCustomerId(customerId);
+        verifyNoMoreInteractions(orderRepository);
+    }
+
+    @Test
+    void testProcessOrder_WhenOrderIsInvalid_ShouldThrowIllegalArgumentException() {
+        // Arrange
+        String customerId = "CUST123";
+        PaymentResponseDto paymentResponse = new PaymentResponseDto();
+        paymentResponse.setCustomer(customerId);
+
+        CustomerOrder mockOrder = new CustomerOrder();
+        mockOrder.setStatus(OrderStatus.CANCELLED); // Invalid order
+
+        when(orderRepository.findByCustomerId(customerId))
+                .thenReturn(Mono.just(mockOrder));
+
+        // Act & Assert
+        StepVerifier.create(orderService.processOrder(paymentResponse))
+                .expectErrorMatches(throwable -> throwable instanceof IllegalArgumentException &&
+                        throwable.getMessage().contains("Invalid order"))
+                .verify();
+
+        verify(orderRepository).findByCustomerId(customerId);
+        verifyNoMoreInteractions(orderRepository);
+    }
+
+
+    private boolean isValidOrder(CustomerOrder order) {
+        return order.getStatus() != OrderStatus.CANCELLED;
+    }
+
+
+
 }
 
